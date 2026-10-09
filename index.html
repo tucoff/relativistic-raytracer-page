@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relativistic Raytracer Benchmark</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
+                    },
+                    colors: {
+                        primary: '#007bff',
+                        surface: '#f8f9fa',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            color: #1a202c;
+        }
+        
+        .divider {
+            border-top: 1px solid #eaeaea;
+            margin: 3rem 0;
+        }
+
+        /* 144p Canvas Styling */
+        #glcanvas {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            image-rendering: pixelated; /* Essential for that sharp 144p look */
+            background-color: #000;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        /* Clean Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #007bff;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 2px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+
+        /* Camera Slider Customization */
+        input[type=range].camera-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 28px;
+            width: 28px;
+            background-color: #ffffff;
+            border: 2px solid #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: -12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            /* Camera SVG rotated 90 deg to compensate for the -90deg input rotation */
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="%23007bff"><g transform="rotate(90 256 256)"><path d="M149.1 64.8L138.7 96H64C28.7 96 0 124.7 0 160V416c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V160c0-35.3-28.7-64-64-64H373.3L362.9 64.8C356.4 45.2 338.1 32 317.4 32H194.6c-20.7 0-39 13.2-45.5 32.8zM256 192a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/></g></svg>');
+            background-size: 16px;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        input[type=range].camera-slider::-moz-range-thumb {
+            height: 28px;
+            width: 28px;
+            background-color: #ffffff;
+            border: 2px solid #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="%23007bff"><g transform="rotate(90 256 256)"><path d="M149.1 64.8L138.7 96H64C28.7 96 0 124.7 0 160V416c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V160c0-35.3-28.7-64-64-64H373.3L362.9 64.8C356.4 45.2 338.1 32 317.4 32H194.6c-20.7 0-39 13.2-45.5 32.8zM256 192a96 96 0 1 1 0 192 96 96 0 1 1 0-192z"/></g></svg>');
+            background-size: 16px;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        /* Custom Scrollbar for controls */
+        .controls-container {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+        .controls-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .controls-container::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-white selection:bg-blue-100 selection:text-blue-900">
+
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h2 class="text-primary font-bold text-xl tracking-wide mb-2">[SIBGRAPI 2026]</h2>
+            <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight text-gray-900 mb-6 leading-tight">
+                A Multi-Engine Benchmark for <br class="hidden md:block">Relativistic Raytracing
+            </h1>
+
+            <!-- Authors -->
+            <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-lg font-medium text-gray-800 mb-4">
+                <a href="#" class="hover:text-primary transition-colors">Artur Raffael Cavalcanti<sup>1</sup></a>
+                <a href="#" class="hover:text-primary transition-colors">Lucas Silva Figueiredo<sup>1</sup></a>
+            </div>
+
+            <div class="text-md text-gray-600 mb-8">
+                <p><sup>1</sup> Universidade Federal Rural de Pernambuco (UFRPE), Recife, Brazil</p>
+            </div>
+
+            <!-- Links -->
+            <div class="flex flex-wrap justify-center gap-4">
+                <a href="#" class="flex flex-col items-center group cursor-pointer w-24">
+                    <div class="w-14 h-14 bg-gray-900 text-white rounded-2xl flex items-center justify-center text-2xl shadow-md group-hover:-translate-y-1 transition-transform">
+                        <i class="fa-solid fa-file-pdf"></i>
+                    </div>
+                    <span class="mt-2 font-semibold text-sm text-gray-700 group-hover:text-primary transition-colors">IEEE (Incoming)</span>
+                </a>
+                
+                <a href="https://github.com/tucoff/relativistic-raytracer-vulkan" target="_blank" class="flex flex-col items-center group cursor-pointer w-24">
+                    <div class="w-14 h-14 bg-[#d32f2f] text-white rounded-2xl flex items-center justify-center text-2xl shadow-md group-hover:-translate-y-1 transition-transform">
+                        <i class="fa-solid fa-code"></i>
+                    </div>
+                    <span class="mt-2 font-semibold text-sm text-gray-700 group-hover:text-primary transition-colors">Vulkan</span>
+                </a>
+
+                <a href="https://github.com/tucoff/relativistic-raytracer-unity" target="_blank" class="flex flex-col items-center group cursor-pointer w-24">
+                    <div class="w-14 h-14 bg-[#222c37] text-white rounded-2xl flex items-center justify-center text-2xl shadow-md group-hover:-translate-y-1 transition-transform">
+                        <i class="fa-brands fa-unity"></i>
+                    </div>
+                    <span class="mt-2 font-semibold text-sm text-gray-700 group-hover:text-primary transition-colors">Unity</span>
+                </a>
+
+                <a href="https://zenodo.org/records/20562083" target="_blank" class="flex flex-col items-center group cursor-pointer w-24">
+                    <div class="w-14 h-14 bg-[#005ea5] text-white rounded-2xl flex items-center justify-center text-2xl shadow-md group-hover:-translate-y-1 transition-transform">
+                        <i class="fa-solid fa-database"></i>
+                    </div>
+                    <span class="mt-2 font-semibold text-sm text-gray-700 group-hover:text-primary transition-colors">Zenodo</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Abstract -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4 text-center">Abstract</h2>
+            <div class="prose max-w-4xl mx-auto text-gray-700 text-justify leading-relaxed">
+                <p>
+                    Interactive relativistic ray tracing has shifted from offline pipelines to real-time GPU workloads, allowing the visualization of gravitational light deflection via per-pixel geodesic integration. However, developers face critical engineering tradeoffs between high-level engine abstractions (e.g., Unity) and low-level APIs (e.g., Vulkan), as well as the choice of numerical integrators across different spacetime geometries. 
+                </p>
+                <p class="mt-4">
+                    This paper introduces <strong>A Multi-Engine Benchmark for Relativistic Raytracing</strong>, a comprehensive performance-accuracy dataset spanning 16,656 timed renders across three spacetime metrics (Newton, Schwarzschild, Kerr), four integrators, and six scenes of varying multi-body complexity. Our findings reveal a resolution-dependent platform crossover: Unity outperforms Vulkan at ultra-low scales (144p) due to dispatch-overhead dominance, whereas Vulkan achieves up to a 2x throughput advantage at interactive resolutions. We identify the first-order Euler method with a medium step size (h=52 km) as a highly practical sweet spot (>1000fps) for interactive rendering, while demonstrating that extreme multi-body configurations mandate higher-order schemes like RK4.
+                </p>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- Real-time Viewer -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 text-center">Interactive WebGL Viewer (144p)</h2>
+            <p class="text-center text-gray-600 mb-8 max-w-3xl mx-auto">
+                Experience real-time geodesic integration directly in your browser. This custom WebGL implementation runs at a strict <strong>144p resolution</strong> (256x144) to match our ultra-low scale benchmarks, utilizing the Euler integrator to visualize Scene 1 (Single Black Hole) and Scene 3 (Accretion Disk) parameters.
+            </p>
+
+            <div class="bg-surface border border-gray-200 rounded-xl p-4 md:p-6 shadow-sm flex flex-col md:flex-row gap-8">
+                
+                <!-- Canvas Container -->
+                <div class="w-full md:w-3/5 flex flex-row items-stretch gap-4">
+                    
+                    <!-- Camera Elevation Control -->
+                    <div id="slider-container" class="flex flex-col items-center w-10 justify-between bg-gray-50 rounded-full py-4 shadow-inner border border-gray-200 flex-shrink-0 transition-all">
+                        <i class="fa-solid fa-chevron-up text-gray-400 text-[12px] z-10"></i>
+                        <div class="relative w-full flex-grow flex items-center justify-center my-3">
+                            <!-- Dynamic width updated by JS to match container height -->
+                            <input type="range" id="ui-camera" min="-1.4" max="1.4" step="0.01" value="0.0" class="absolute origin-center -rotate-90 cursor-pointer camera-slider" title="Camera Elevation">
+                        </div>
+                        <i class="fa-solid fa-chevron-down text-gray-400 text-[12px] z-10"></i>
+                    </div>
+
+                    <div id="canvas-container" class="flex-grow flex flex-col justify-center w-full min-w-0">
+                        <canvas id="glcanvas" width="256" height="144" class="w-full"></canvas>
+                        <div class="flex justify-between items-center mt-3 px-2">
+                            <p class="text-xs text-gray-400 truncate pr-2">Rendering: WebGL 2.0 Compute Shader (Fragment-based)</p>
+                            <p class="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded border border-gray-200 whitespace-nowrap">FPS: <span id="fps-counter" class="text-primary">0</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="w-full md:w-2/5 flex flex-col h-[400px]">
+                    <h3 class="font-bold text-gray-800 border-b pb-2 mb-4">Simulation Parameters</h3>
+                    
+                    <div class="controls-container overflow-y-auto pr-2 space-y-5 flex-grow">
+                        
+                        <!-- Metric -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Spacetime Metric</label>
+                            <select id="ui-metric" class="w-full bg-white border border-gray-300 rounded-md py-1.5 px-3 text-sm focus:ring-primary focus:border-primary outline-none">
+                                <option value="0">Newton (Heuristic)</option>
+                                <option value="1" selected>Schwarzschild (Static)</option>
+                                <option value="2">Kerr (Rotating)</option>
+                            </select>
+                        </div>
+
+                        <!-- Step Size -->
+                        <div>
+                            <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                                <label>Step Size (h)</label>
+                                <span id="val-step" class="text-primary font-mono">2.0 km</span>
+                            </div>
+                            <input type="range" id="ui-step" min="1.0" max="260.0" step="0.1" value="2.0">
+                        </div>
+
+                        <!-- Gravity Multiplier -->
+                        <div>
+                            <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                                <label>Gravity Multiplier</label>
+                                <span id="val-grav" class="text-primary font-mono">1.0</span>
+                            </div>
+                            <input type="range" id="ui-grav" min="0.1" max="10.0" step="0.1" value="1.0">
+                        </div>
+
+                        <!-- Spin (Kerr only) -->
+                        <div id="spin-container">
+                            <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                                <label>Spin Parameter (a)</label>
+                                <span id="val-spin" class="text-primary font-mono">0.0</span>
+                            </div>
+                            <input type="range" id="ui-spin" min="0.0" max="1000.0" step="0.1" value="0.0">
+                        </div>
+
+                        <hr class="border-gray-200">
+
+                        <!-- Disk Toggle -->
+                        <div class="flex items-center">
+                            <input type="checkbox" id="ui-disk-toggle" class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary" checked>
+                            <label for="ui-disk-toggle" class="ml-2 text-sm font-medium text-gray-700">Enable Accretion Disk</label>
+                        </div>
+
+                        <!-- Disk Controls (Wrappers to hide/show) -->
+                        <div id="disk-controls" class="space-y-4">
+                            <div>
+                                <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                                    <label>Disk Inner Radius</label>
+                                    <span id="val-d-in" class="text-primary font-mono">74.0</span>
+                                </div>
+                                <input type="range" id="ui-d-in" min="10.0" max="250.0" step="1.0" value="74.0">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                                    <label>Disk Outer Radius</label>
+                                    <span id="val-d-out" class="text-primary font-mono">162.0</span>
+                                </div>
+                                <input type="range" id="ui-d-out" min="20.0" max="400.0" step="1.0" value="162.0">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                                    <label>Disk Thickness</label>
+                                    <span id="val-d-thick" class="text-primary font-mono">1.0</span>
+                                </div>
+                                <input type="range" id="ui-d-thick" min="0.1" max="10.0" step="0.1" value="1.0">
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                                    <label>Disk Pitch (X Rot)</label>
+                                    <span id="val-d-rotx" class="text-primary font-mono">3.0</span>
+                                </div>
+                                <input type="range" id="ui-d-rotx" min="0.0" max="3.1415" step="0.01" value="3.0">
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- Key Results -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-6 text-center">Performance & Scaling Results</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="font-bold text-lg mb-3">Platform Crossover</h3>
+                    <p class="text-gray-700 text-sm mb-4 leading-relaxed">
+                        At sub-millisecond GPU kernel durations (144p), Unity's highly optimized engine framework manages command synchronization with tight integration intervals, minimizing driver idling and outperforming Vulkan by up to 1.6x. However, at interactive resolutions (480p+), Vulkan's thinner driver abstraction yields a persistent advantage, especially in computationally dense multi-body scenes.
+                    </p>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600 border border-gray-200">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3">Resolution</th>
+                                    <th scope="col" class="px-4 py-3">Newton (Euler)</th>
+                                    <th scope="col" class="px-4 py-3">Schw. (RK4)</th>
+                                    <th scope="col" class="px-4 py-3">Kerr (RK4)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="bg-white border-b">
+                                    <td class="px-4 py-2 font-medium text-gray-900">144p</td>
+                                    <td class="px-4 py-2">~1200 FPS</td>
+                                    <td class="px-4 py-2">~400 FPS</td>
+                                    <td class="px-4 py-2">~300 FPS</td>
+                                </tr>
+                                <tr class="bg-white border-b">
+                                    <td class="px-4 py-2 font-medium text-gray-900">480p</td>
+                                    <td class="px-4 py-2">~400 FPS</td>
+                                    <td class="px-4 py-2">~100 FPS</td>
+                                    <td class="px-4 py-2">~75 FPS</td>
+                                </tr>
+                                <tr class="bg-white">
+                                    <td class="px-4 py-2 font-medium text-gray-900">1080p</td>
+                                    <td class="px-4 py-2">~120 FPS</td>
+                                    <td class="px-4 py-2">~30 FPS</td>
+                                    <td class="px-4 py-2">~20 FPS</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="font-bold text-lg mb-3">Integrator Accuracy Tradeoff</h3>
+                    <p class="text-gray-700 text-sm mb-4 leading-relaxed">
+                        The Euler-L to RK4 throughput gap spans 95x (Newton) to 141x (Kerr). The gap widens with metric complexity because RK4's fourfold Christoffel evaluation amplifies Kerr's intensive arithmetic overhead. Below, we present the structural similarity (SSIM) and processing speedup of Euler step configurations relative to the RK4 baseline at 480p (Vulkan).
+                    </p>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600 border border-gray-200">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3">Integrator</th>
+                                    <th scope="col" class="px-4 py-3">PSNR (dB)</th>
+                                    <th scope="col" class="px-4 py-3">SSIM (μ±σ)</th>
+                                    <th scope="col" class="px-4 py-3">Speed-up</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="bg-white border-b">
+                                    <td class="px-4 py-2 font-medium text-gray-900">Euler-L (260km)</td>
+                                    <td class="px-4 py-2">12.4</td>
+                                    <td class="px-4 py-2">0.47 ± 0.25</td>
+                                    <td class="px-4 py-2 text-green-600 font-bold">141x</td>
+                                </tr>
+                                <tr class="bg-white border-b">
+                                    <td class="px-4 py-2 font-medium text-gray-900">Euler-M (52km)</td>
+                                    <td class="px-4 py-2">15.1</td>
+                                    <td class="px-4 py-2">0.57 ± 0.26</td>
+                                    <td class="px-4 py-2 text-green-600 font-bold">66x</td>
+                                </tr>
+                                <tr class="bg-white">
+                                    <td class="px-4 py-2 font-medium text-gray-900">Euler-S (1km)</td>
+                                    <td class="px-4 py-2">25.8</td>
+                                    <td class="px-4 py-2">0.78 ± 0.29</td>
+                                    <td class="px-4 py-2 text-green-600 font-bold">2.5x</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+        <!-- Citation -->
+        <section class="mb-12">
+            <h2 class="text-2xl font-bold mb-4">Citation</h2>
+            <div class="bg-gray-100 p-6 rounded-lg font-mono text-sm text-gray-800 overflow-x-auto border border-gray-200">
+<code>@inproceedings{cavalcanti2026relativistic,
+    title={Relativistic Raytracer: A GPU Benchmark Across Metrics, Integrators, and Platforms},
+    author={Cavalcanti, Artur Raffael and Silva Figueiredo, Lucas},
+    booktitle={39th Conference on Graphics, Patterns and Images (SIBGRAPI)},
+    year={2026},
+    organization={IEEE}
+}</code>
+            </div>
+            <p class="text-sm text-gray-500 mt-4 text-center">
+                This project relies on theoretical foundations by Schwarzschild (1916), Kerr (1963), and geometric numerical integration methods.
+            </p>
+        </section>
+        
+    </main>
+
+    <footer class="border-t border-gray-200 bg-gray-50 py-8">
+        <div class="max-w-5xl mx-auto px-4 text-center text-sm text-gray-500">
+            <p>Licensed under the MIT License - see the repositories for Academic Attribution Requirements.</p>
+        </div>
+    </footer>
+
+    <script>
+        /* =========================================================================
+           WebGL 2.0 Application for Interactive Relativistic Raytracing
+           ========================================================================= */
+
+        const vsSource = `#version 300 es
+        in vec4 a_position;
+        void main() {
+            gl_Position = a_position;
+        }`;
+
+        const fsSource = `#version 300 es
+        precision highp float;
+        out vec4 FragColor;
+
+        uniform vec2 u_resolution;
+        
+        // UI Parameters
+        uniform int u_metric; // 0: Newton, 1: Schw, 2: Kerr
+        uniform float u_step;
+        uniform float u_grav;
+        uniform float u_spin;
+        
+        // Disk Parameters
+        uniform bool u_has_disk;
+        uniform float u_d_in;
+        uniform float u_d_out;
+        uniform float u_d_thick;
+        uniform float u_d_rotx;
+        uniform float u_d_rotz;
+        
+        uniform float u_cam_elevation;
+
+        // Physics Constants (Simplified for web presentation)
+        const float RS = 29.53; // Schwarzschild radius in km for 10 Solar Masses
+        const int MAX_STEPS = 600; // Capped for WebGL safety
+
+        // Helpers
+        mat3 rotateX(float theta) {
+            float c = cos(theta);
+            float s = sin(theta);
+            return mat3(
+                1.0, 0.0, 0.0,
+                0.0, c, -s,
+                0.0, s, c
+            );
+        }
+
+        mat3 rotateZ(float theta) {
+            float c = cos(theta);
+            float s = sin(theta);
+            return mat3(
+                c, -s, 0.0,
+                s, c, 0.0,
+                0.0, 0.0, 1.0
+            );
+        }
+
+        // Skybox background quadrant colored - Pure max strength colors
+        vec3 get_sky_color(vec3 dir) {
+            vec3 n = normalize(dir);
+            vec3 color;
+            
+            if (n.x < 0.0 && n.y > 0.0) color = vec3(1.0, 1.0, 0.0); // Pure Yellow
+            else if (n.x >= 0.0 && n.y > 0.0) color = vec3(1.0, 0.0, 0.0); // Pure Red
+            else if (n.x < 0.0 && n.y <= 0.0) color = vec3(0.0, 0.0, 1.0); // Pure Blue
+            else color = vec3(0.0, 1.0, 0.0); // Pure Green
+            
+            return color;
+        }
+
+        // Gravitational Acceleration
+        vec3 get_gravity_accel(vec3 pos, vec3 v) {
+            // Black hole is at origin
+            vec3 toSphere = -pos;
+            float dist = length(toSphere);
+            if (dist < 0.0001) return vec3(0.0);
+
+            float dist2 = dist * dist;
+            float dist3 = dist2 * dist;
+            float dist5 = dist3 * dist2;
+            
+            float adj_rs = RS * u_grav;
+
+            if (u_metric == 0) { // Newton
+                return toSphere * (adj_rs * 0.5) / dist3;
+            } else if (u_metric == 1) { // Schwarzschild
+                vec3 h = cross(-toSphere, v);
+                return toSphere * (1.5 * adj_rs * dot(h, h)) / dist5;
+            } else { // Kerr
+                vec3 r_vec = -toSphere;
+                vec3 h = cross(r_vec, v);
+                vec3 a_schwarz = -r_vec * (1.5 * adj_rs * dot(h, h)) / dist5;
+                
+                vec3 spin_vec = vec3(0.0, 1.0, 0.0) * adj_rs * u_spin;
+                vec3 H = (2.0 / dist5) * (3.0 * r_vec * dot(spin_vec, r_vec) - spin_vec * dist2);
+                vec3 a_frame_drag = -cross(v, H);
+                
+                return a_schwarz + a_frame_drag;
+            }
+        }
+
+        void main() {
+            vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+            uv = uv * 2.0 - 1.0;
+            uv.x *= u_resolution.x / u_resolution.y;
+
+            // Setup camera (Orbital lookAt)
+            float r = 250.0;
+            vec3 origin = vec3(0.0, r * sin(u_cam_elevation), -r * cos(u_cam_elevation));
+            vec3 target = vec3(0.0, 0.0, 0.0);
+            
+            vec3 ww = normalize(target - origin);
+            vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), ww));
+            vec3 vv = normalize(cross(ww, uu));
+            
+            // Generate ray direction (1.5 determines FOV)
+            vec3 dir = normalize(uv.x * uu + uv.y * vv + ww * 1.5);
+            
+            vec3 pos = origin;
+            vec3 v = dir;
+            
+            vec3 finalColor = vec3(0.0);
+            bool hitSomething = false;
+            
+            mat3 disk_rot = rotateX(u_d_rotx) * rotateZ(u_d_rotz);
+
+            for(int i = 0; i < MAX_STEPS; i++) {
+                
+                // Black hole Event Horizon Collision
+                if(length(pos) < RS * u_grav * 1.05) { // 1.05 for visual boundary
+                    finalColor = vec3(0.0);
+                    hitSomething = true;
+                    break;
+                }
+
+                // Accretion Disk Collision
+                if (u_has_disk) {
+                    vec3 rot_pos = disk_rot * pos;
+                    if (abs(rot_pos.y) < u_d_thick) {
+                        float r = length(rot_pos.xz);
+                        if (r > u_d_in && r < u_d_out) {
+                            // Hit disk. Color based on radius (inner is hotter/brighter)
+                            float t = (r - u_d_in) / (u_d_out - u_d_in);
+                            vec3 innerColor = vec3(1.0, 0.9, 0.7); // Bright white-yellow
+                            vec3 outerColor = vec3(0.8, 0.3, 0.0); // Dark orange
+                            finalColor = mix(innerColor, outerColor, t);
+                            
+                            // Simple shadowing grid pattern to show Doppler/twist better
+                            float pattern = sin(atan(rot_pos.z, rot_pos.x) * 20.0) * sin(r * 0.5);
+                            finalColor *= 0.8 + 0.2 * pattern;
+
+                            hitSomething = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Escape boundary
+                if(length(pos) > 1500.0) {
+                    break; // Exited simulation sphere
+                }
+
+                // Euler Integration Step
+                vec3 accel = get_gravity_accel(pos, v);
+                v = normalize(v + accel * u_step);
+                pos += v * u_step;
+            }
+
+            if (!hitSomething) {
+                finalColor = get_sky_color(v);
+            }
+
+            // Post-processing mapping
+            finalColor *= 1.2;
+            finalColor = finalColor / (finalColor + vec3(0.15));
+            finalColor = pow(finalColor, vec3(1.0 / 2.2));
+
+            FragColor = vec4(finalColor, 1.0);
+        }
+        `;
+
+        // Initialize WebGL context
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl2');
+
+        if (!gl) {
+            console.error("WebGL 2 not supported.");
+            alert("WebGL 2 is required for this demo.");
+        }
+
+        // Compilation helper
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error(gl.getProgramInfoLog(program));
+        }
+
+        gl.useProgram(program);
+
+        // Quad setup
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        const positions = [
+            -1.0, -1.0,
+             1.0, -1.0,
+            -1.0,  1.0,
+            -1.0,  1.0,
+             1.0, -1.0,
+             1.0,  1.0,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+        const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
+        gl.enableVertexAttribArray(positionAttributeLocation);
+        gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Uniform locations
+        const uResolution = gl.getUniformLocation(program, "u_resolution");
+        const uMetric = gl.getUniformLocation(program, "u_metric");
+        const uStep = gl.getUniformLocation(program, "u_step");
+        const uGrav = gl.getUniformLocation(program, "u_grav");
+        const uSpin = gl.getUniformLocation(program, "u_spin");
+        
+        const uHasDisk = gl.getUniformLocation(program, "u_has_disk");
+        const uDIn = gl.getUniformLocation(program, "u_d_in");
+        const uDOut = gl.getUniformLocation(program, "u_d_out");
+        const uDThick = gl.getUniformLocation(program, "u_d_thick");
+        const uDRotX = gl.getUniformLocation(program, "u_d_rotx");
+        const uDRotZ = gl.getUniformLocation(program, "u_d_rotz");
+        
+        const uCamElevation = gl.getUniformLocation(program, "u_cam_elevation");
+
+        // UI Binding and state
+        const uiElements = {
+            metric: document.getElementById('ui-metric'),
+            step: document.getElementById('ui-step'),
+            grav: document.getElementById('ui-grav'),
+            spin: document.getElementById('ui-spin'),
+            diskToggle: document.getElementById('ui-disk-toggle'),
+            dIn: document.getElementById('ui-d-in'),
+            dOut: document.getElementById('ui-d-out'),
+            dThick: document.getElementById('ui-d-thick'),
+            dRotX: document.getElementById('ui-d-rotx'),
+            camElev: document.getElementById('ui-camera'),
+        };
+
+        const valDisplays = {
+            step: document.getElementById('val-step'),
+            grav: document.getElementById('val-grav'),
+            spin: document.getElementById('val-spin'),
+            dIn: document.getElementById('val-d-in'),
+            dOut: document.getElementById('val-d-out'),
+            dThick: document.getElementById('val-d-thick'),
+            dRotX: document.getElementById('val-d-rotx'),
+        };
+
+        // UI Event Listeners
+        function attachListeners() {
+            Object.keys(uiElements).forEach(key => {
+                if(!uiElements[key]) return;
+                uiElements[key].addEventListener('input', () => {
+                    updateDisplays();
+                    updateDependents();
+                });
+            });
+        }
+
+        function updateDisplays() {
+            valDisplays.step.innerText = parseFloat(uiElements.step.value).toFixed(1) + " km";
+            valDisplays.grav.innerText = parseFloat(uiElements.grav.value).toFixed(1);
+            valDisplays.spin.innerText = parseFloat(uiElements.spin.value).toFixed(1);
+            valDisplays.dIn.innerText = parseFloat(uiElements.dIn.value).toFixed(1);
+            valDisplays.dOut.innerText = parseFloat(uiElements.dOut.value).toFixed(1);
+            valDisplays.dThick.innerText = parseFloat(uiElements.dThick.value).toFixed(1);
+            valDisplays.dRotX.innerText = parseFloat(uiElements.dRotX.value).toFixed(2);
+        }
+
+        function updateDependents() {
+            // Spin slider logic
+            const spinContainer = document.getElementById('spin-container');
+            if(parseInt(uiElements.metric.value) === 2) {
+                spinContainer.style.opacity = '1';
+                spinContainer.style.pointerEvents = 'auto';
+            } else {
+                spinContainer.style.opacity = '0.3';
+                spinContainer.style.pointerEvents = 'none';
+            }
+
+            // Disk logic
+            const diskControls = document.getElementById('disk-controls');
+            if(uiElements.diskToggle.checked) {
+                diskControls.style.display = 'block';
+            } else {
+                diskControls.style.display = 'none';
+            }
+        }
+
+        // Function to dynamically size the vertical slider to match the canvas height
+        function resizeCameraSlider() {
+            const container = document.getElementById('slider-container');
+            const slider = document.getElementById('ui-camera');
+            if (container && slider) {
+                // Adjust slider width (which acts as height due to -90deg rotation)
+                // Subtracted 48px to leave padding for the up/down chevrons
+                const availableHeight = container.clientHeight - 48;
+                slider.style.width = availableHeight + 'px';
+            }
+        }
+
+        window.addEventListener('resize', resizeCameraSlider);
+
+        let lastTime = performance.now();
+        let avgDt = 16.6; // initial frame time guess
+        const fpsDisplay = document.getElementById('fps-counter');
+        const syncBuf = new Uint8Array(4); // Used to force GPU sync
+
+        // Render loop continuously for real-time FPS
+        function render(now) {
+            const t0 = performance.now();
+
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            
+            gl.uniform2f(uResolution, canvas.width, canvas.height);
+            gl.uniform1i(uMetric, parseInt(uiElements.metric.value));
+            gl.uniform1f(uStep, parseFloat(uiElements.step.value));
+            gl.uniform1f(uGrav, parseFloat(uiElements.grav.value));
+            gl.uniform1f(uSpin, parseFloat(uiElements.spin.value));
+            
+            gl.uniform1i(uHasDisk, uiElements.diskToggle.checked ? 1 : 0);
+            gl.uniform1f(uDIn, parseFloat(uiElements.dIn.value));
+            gl.uniform1f(uDOut, parseFloat(uiElements.dOut.value));
+            gl.uniform1f(uDThick, parseFloat(uiElements.dThick.value));
+            gl.uniform1f(uDRotX, parseFloat(uiElements.dRotX.value));
+            gl.uniform1f(uDRotZ, 0.0); // Fixed Z rotation for simplicity
+            
+            gl.uniform1f(uCamElevation, parseFloat(uiElements.camElev.value));
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            
+            // Force pipeline flush to measure actual GPU execution time (bypassing vsync limits)
+            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, syncBuf);
+            
+            const t1 = performance.now();
+            const dt = Math.max(t1 - t0, 0.5); // Bound to avoid division by zero
+            avgDt = avgDt * 0.9 + dt * 0.1; // Smooth rolling average
+
+            if (now - lastTime >= 500) {
+                if (fpsDisplay) fpsDisplay.innerText = Math.round(1000 / avgDt);
+                lastTime = now;
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        // Start
+        window.onload = () => {
+            attachListeners();
+            updateDisplays();
+            updateDependents();
+            // Trigger an initial resize for the camera slider once layout is established
+            setTimeout(resizeCameraSlider, 100); 
+            requestAnimationFrame(render);
+        };
+
+    </script>
+</body>
+</html>
